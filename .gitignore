@@ -1,5 +1,4 @@
 eCommerce.code-workspace
 server/node_modules
 server/.env
-server/package.json
 server/package-lock.json
