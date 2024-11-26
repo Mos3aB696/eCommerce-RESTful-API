@@ -1,14 +1,16 @@
 import globals from 'globals';
 import pluginJs from '@eslint/js';
-import pluginReact from 'eslint-plugin-react';
+import pluginJsdoc from 'eslint-plugin-jsdoc';
 
 /** @type {import('eslint').Linter.Config[]} */
 export default [
   { files: ['**/*.{js,mjs,cjs,jsx}'] },
   { languageOptions: { globals: { ...globals.browser, ...globals.node } } },
   pluginJs.configs.recommended,
-  pluginReact.configs.flat.recommended,
   {
+    plugins: {
+      jsdoc: pluginJsdoc,
+    },
     rules: {
       'no-console': 'warn',
       'no-undef': 'error',
@@ -34,6 +36,21 @@ export default [
           argsIgnorePattern: 'req|res|next|val',
         },
       ],
+      'jsdoc/check-alignment': 'error',
+      'jsdoc/check-param-names': 'error',
+      'jsdoc/check-tag-names': 'error',
+      'jsdoc/require-jsdoc': [
+        'warn',
+        {
+          require: {
+            FunctionDeclaration: true,
+            MethodDefinition: true,
+            ClassDeclaration: true,
+          },
+        },
+      ],
+      'jsdoc/require-param': 'warn',
+      'jsdoc/require-returns': 'warn',
     },
   },
 ];
