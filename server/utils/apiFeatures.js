@@ -1,9 +1,21 @@
+/**
+ * Class representing API features for querying.
+ */
 export default class ApiFeatures {
+  /**
+   * Create API features.
+   * @param {Object} query - The query object.
+   * @param {Object} queryString - The query string object.
+   */
   constructor(query, queryString) {
     this.query = query;
     this.queryString = queryString;
   }
 
+  /**
+   * Filter the query based on the query string.
+   * @returns {ApiFeatures} The instance of the API features.
+   */
   filter() {
     const queryObj = { ...this.queryString };
     const excludedFields = ['page', 'sort', 'limit', 'fields'];
@@ -16,6 +28,10 @@ export default class ApiFeatures {
     return this;
   }
 
+  /**
+   * Sort the query based on the query string.
+   * @returns {ApiFeatures} The instance of the API features.
+   */
   sort() {
     if (this.queryString.sort) {
       const sortBy = this.queryString.sort.split(',').join(' ');
@@ -26,6 +42,10 @@ export default class ApiFeatures {
     return this;
   }
 
+  /**
+   * Limit the fields of the query based on the query string.
+   * @returns {ApiFeatures} The instance of the API features.
+   */
   limitFields() {
     if (this.queryString.fields) {
       const fields = this.queryString.fields.split(',').join(' ');
@@ -36,6 +56,10 @@ export default class ApiFeatures {
     return this;
   }
 
+  /**
+   * Paginate the query based on the query string.
+   * @returns {ApiFeatures} The instance of the API features.
+   */
   paginate() {
     const page = this.queryString.page * 1 || 1;
     const limit = this.queryString.limit * 1 || 100;

@@ -3,10 +3,10 @@ import AppError from '../utils/appError.js';
 
 const genralError = (err, req, res, next) => {
   res.status(err.statusCode || 400).json({
-    status: err.statusMsg,
+    status: err.statusMsg || httpStatusText.FAIL,
     data: null,
     message: err.message,
-    code: err.statusCode,
+    code: err.statusCode || 400,
   });
 };
 
