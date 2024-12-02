@@ -1,18 +1,21 @@
 import express from 'express';
 import productController from '../controllers/productController.js';
+import authController from '../controllers/authController.js';
 
 const router = express.Router();
 
-// router.param('id', productController.checkId);
-
 router
   .route('/')
-  .get(productController.getAllProducts)
+  .get(authController.protect, productController.getAllProducts)
   .post(productController.createProduct);
 router
   .route('/:id')
   .get(productController.getProduct)
   .patch(productController.updateProduct)
-  .delete(productController.deleteProduct);
+  .delete(
+    authController.protect,
+    authController.restrictTo('admin'),
+    productController.deleteProduct
+  );
 
 export default router;

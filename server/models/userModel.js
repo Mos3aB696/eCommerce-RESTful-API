@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import validator from 'validator';
 import bcrypt from 'bcryptjs';
@@ -7,16 +8,16 @@ const userSchema = new mongoose.Schema({
   firstName: {
     type: String,
     required: [true, 'Name is required'],
-    min: [3, 'Name must be at least 3 characters'],
-    max: [20, 'Name must be at most 20 characters'],
+    minlength: [3, 'Name must be at least 3 characters'],
+    maxlength: [20, 'Name must be at most 20 characters'],
     trim: true,
     validate: [validator.isAlpha, 'Name must only contain letters (a-z, A-Z)'],
   },
   lastName: {
     type: String,
     required: [true, 'Name is required'],
-    min: [3, 'Name must be at least 3 characters'],
-    max: [20, 'Name must be at most 20 characters'],
+    minlength: [3, 'Name must be at least 3 characters'],
+    maxlength: [20, 'Name must be at most 20 characters'],
     trim: true,
     validate: [validator.isAlpha, 'Name must only contain letters (a-z, A-Z)'],
   },
@@ -24,8 +25,8 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Username is required'],
     unique: true,
-    min: [3, 'Username must be at least 3 characters'],
-    max: [30, 'Username must be at most 30 characters'],
+    minlength: [3, 'Username must be at least 3 characters'],
+    maxlength: [20, 'Username must be at most 20 characters'],
     trim: true,
   },
   email: {
@@ -36,11 +37,15 @@ const userSchema = new mongoose.Schema({
     validate: [validator.isEmail, 'Please provide a valid email 😒'],
     lowercase: true,
   },
+  role: {
+    type: String,
+    enum: ['user', 'admin'],
+    default: 'user',
+  },
   password: {
     type: String,
     required: [true, 'Password is required'],
-    min: [8, 'Password must be at least 8 characters'],
-    max: [30, 'Password must be at most 30 characters'],
+    minlength: [8, 'Password must be at least 8 characters'],
     select: false,
   },
   confirmPassword: {
@@ -54,6 +59,10 @@ const userSchema = new mongoose.Schema({
       message: 'Passwords are not the same 😒',
     },
   },
+  passwordChangeAt: Date,
+  passwordResetToken: String,
+  passwordResetExpires: Date,
+
   phoneNumber: {
     type: String,
     required: [true, 'Phone number is required'],
@@ -62,6 +71,7 @@ const userSchema = new mongoose.Schema({
       'Please provide a valid phone number 😒',
     ],
   },
+
   //? Optional fields
   photo: {
     type: String,
@@ -83,6 +93,13 @@ userSchema.pre('save', async function (next) {
   next();
 });
 
+userSchema.pre('save', function (next) {
+  if (!this.isModified('password') || this.isNew) return next();
+  //* -1 second to make sure the token is created after the password was changed
+  this.passwordChangeAt = Date.now() - 1000;
+  next();
+});
+
 /**
  * Compare the input password with the user's stored password.
  *
@@ -98,6 +115,42 @@ userSchema.methods.correctPassword = async function (
   userPassword
 ) {
   return await bcrypt.compare(inputPassword, userPassword);
+};
+
+/**
+ * Check if the user's password was changed after the JWT token was issued.
+ *
+ * @function isChanged
+ * @memberof User
+ * @param {number} JWTTimestamp - The timestamp when the JWT token was issued.
+ * @returns {boolean} - Returns true if the user's password was changed after the JWT token was issued, otherwise false.
+ */
+
+userSchema.methods.isChanged = function (JWTTimestamp) {
+  if (this.passwordChangeAt) {
+    const changedTimestamp = parseInt(
+      this.passwordChangeAt.getTime() / 1000,
+      10
+    );
+    return JWTTimestamp < changedTimestamp;
+  }
+  // false means NOT changed
+  return false;
+};
+
+userSchema.methods.resetPasswordToken = function () {
+  //* 1) Generate a random token
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  //* 2) Save the hashed reset token to the database
+  this.passwordResetToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+
+  //* 3) Save the expiration time to the database
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+  return resetToken;
 };
 
 const User = mongoose.model('User', userSchema);
