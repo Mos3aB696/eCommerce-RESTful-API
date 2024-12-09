@@ -1,0 +1,3 @@
+!! Create middleware to check if the user email is verified => Done
+x Check regenerateEmailToken function => Done
+x chekc verifyEmail function => Done

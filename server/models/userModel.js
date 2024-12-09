@@ -28,6 +28,10 @@ const userSchema = new mongoose.Schema({
     minlength: [3, 'Username must be at least 3 characters'],
     maxlength: [20, 'Username must be at most 20 characters'],
     trim: true,
+    validate: [
+      validator.isAlphanumeric,
+      'Username must only contain letters and numbers',
+    ],
   },
   email: {
     type: String,
@@ -37,6 +41,12 @@ const userSchema = new mongoose.Schema({
     validate: [validator.isEmail, 'Please provide a valid email 😒'],
     lowercase: true,
   },
+  emailVerified: {
+    type: Boolean,
+    default: false,
+  },
+  emailVerificationToken: String,
+  emailVerificationExpires: Date,
   role: {
     type: String,
     enum: ['user', 'admin'],
@@ -138,17 +148,26 @@ userSchema.methods.isChanged = function (JWTTimestamp) {
   return false;
 };
 
-userSchema.methods.resetPasswordToken = function () {
-  //* 1) Generate a random token
+userSchema.methods.resetAndConfirmTokene = function (type) {
+  //* 1) Check if the type is valid
+  if (!type) throw new Error('Type is required for reset password token');
+  if (type !== 'emailVerification' && type !== 'passwordReset')
+    throw new Error('Invalid type for reset token');
+
+  //* 2) Generate a random token
   const resetToken = crypto.randomBytes(32).toString('hex');
-  //* 2) Save the hashed reset token to the database
-  this.passwordResetToken = crypto
+
+  //* 3) Create hashed reset token to the database
+  const hashedToken = crypto
     .createHash('sha256')
     .update(resetToken)
     .digest('hex');
 
-  //* 3) Save the expiration time to the database
-  this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  //* 4) Save the expiration time to the database
+  const tokenField = `${type}Token`;
+  const expiresField = `${type}Expires`;
+  this[tokenField] = hashedToken;
+  this[expiresField] = Date.now() + 10 * 60 * 1000; // 10 minutes
 
   return resetToken;
 };

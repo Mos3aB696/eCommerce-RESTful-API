@@ -8,7 +8,42 @@ import sendEmail from '../utils/email.js';
 import crypto from 'crypto';
 import createToken from '../utils/createToken.js';
 
+const createSendToken = (user, statusCode, res, signUp = null) => {
+  const token = createToken(user._id);
+  const cookieOptions = {
+    expires: new Date(
+      Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000 // 30 days
+    ),
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'Lax', // Protect against CSRF
+  };
+
+  res.cookie('jwt', token, cookieOptions);
+
+  if (signUp) {
+    res.status(statusCode).json({
+      status: 'success',
+      message:
+        'Your account has been successfully created. Please check your email and verify your email address.',
+      token,
+      data: {
+        user,
+      },
+    });
+  } else {
+    res.status(statusCode).json({
+      status: 'success',
+      token,
+      data: {
+        user,
+      },
+    });
+  }
+};
+
 const signUp = asyncWrapper(async (req, res, next) => {
+  //? 1) Create a new user and send token to confirm email
   const newUser = await User.create({
     firstName: req.body.firstName,
     lastName: req.body.lastName,
@@ -17,18 +52,85 @@ const signUp = asyncWrapper(async (req, res, next) => {
     password: req.body.password,
     confirmPassword: req.body.confirmPassword,
     phoneNumber: req.body.phoneNumber,
-    changedPasswordAt: req.body.changedPasswordAt,
+  });
+  const confirmeToken = newUser.resetAndConfirmTokene('emailVerification');
+  await newUser.save({ validateBeforeSave: false });
+
+  //? 2) Send the token to the user's email
+  const verificationURL = `${req.protocol}://${req.get(
+    'host'
+  )}/api/v1/users/verifyEmail/${confirmeToken}`;
+  const message = `Please verify your email address by clicking the link below: ${verificationURL}`;
+
+  try {
+    await sendEmail({
+      email: newUser.email,
+      subject: 'Email verification token (valid for 10 min)',
+      message,
+    });
+    createSendToken(newUser, 201, res, true);
+  } catch (err) {
+    newUser.emailVerificationToken = undefined;
+    newUser.emailVerificationExpires = undefined;
+    await newUser.save({ validateBeforeSave: false });
+    const error = appError.create(500, httpStatusText.ERROR, err.message);
+    return next(error);
+  }
+});
+
+const regenerateEmailToken = asyncWrapper(async (req, res, next) => {
+  const user = await User.findOne({
+    email: req.user.email,
+    emailVerified: false,
+  });
+  const confirmeToken = user.resetAndConfirmTokene('emailVerification');
+  await user.save({ validateBeforeSave: false });
+  const verificationURL = `${req.protocol}://${req.get(
+    'host'
+  )}/api/v1/users/verifyEmail/${confirmeToken}`;
+  const message = `Please verify your email address by clicking the link below: ${verificationURL}`;
+  try {
+    await sendEmail({
+      email: user.email,
+      subject: 'Email verification token (valid for 10 min)',
+      message,
+    });
+    res.status(200).json({
+      status: httpStatusText.SUCCESS,
+      message: 'Token sent to email!',
+    });
+  } catch (err) {
+    const error = appError.create(500, httpStatusText.ERROR, err.message);
+    return next(error);
+  }
+});
+
+const verifyEmail = asyncWrapper(async (req, res, next) => {
+  const hashedToken = crypto
+    .createHash('sha256')
+    .update(req.params.token)
+    .digest('hex');
+
+  const user = await User.findOne({
+    emailVerificationToken: hashedToken,
+    emailVerificationExpires: { $gt: Date.now() },
   });
 
-  const token = createToken(newUser._id);
+  if (!user) {
+    const error = appError.create(
+      400,
+      httpStatusText.FAIL,
+      'Token is invalid or has expired..!'
+    );
+    return next(error);
+  }
 
-  res.status(201).json({
-    status: 'success',
-    token,
-    data: {
-      user: newUser,
-    },
-  });
+  user.emailVerified = true;
+  user.emailVerificationToken = undefined;
+  user.emailVerificationExpires = undefined;
+  await user.save({ validateBeforeSave: false });
+
+  createSendToken(user, 200, res);
 });
 
 const login = asyncWrapper(async (req, res, next) => {
@@ -53,11 +155,7 @@ const login = asyncWrapper(async (req, res, next) => {
     return next(error);
   }
   // 3) If everything is ok, send token to client
-  const token = createToken(user._id);
-  res.status(200).json({
-    status: httpStatusText.SUCCESS,
-    token,
-  });
+  createSendToken(user, 200, res);
 });
 
 const protect = asyncWrapper(async (req, res, next) => {
@@ -106,6 +204,16 @@ const protect = asyncWrapper(async (req, res, next) => {
     return next(error);
   }
 
+  //? Check if email is verified
+  // if (!currentUser.emailVerified) {
+  //   const error = appError.create(
+  //     401,
+  //     httpStatusText.FAIL,
+  //     'Please verify your email first 😒'
+  //   );
+  //   return next(error);
+  // }
+
   //? Grant access to protected route
   req.user = currentUser;
   next();
@@ -137,7 +245,7 @@ const forgotPassword = asyncWrapper(async (req, res, next) => {
     return next(error);
   }
   // 2) Generate the random reset token
-  const resetToken = user.resetPasswordToken();
+  const resetToken = user.resetAndConfirmTokene('passwordReset');
   await user.save({ validateBeforeSave: false });
 
   // 3) Send it to user's email
@@ -166,6 +274,7 @@ const forgotPassword = asyncWrapper(async (req, res, next) => {
     return next(error);
   }
 });
+
 const resetPassword = asyncWrapper(async (req, res, next) => {
   // 1) Get user based on the token
   //? Hashing the token to compare it with the hashed one on the database
@@ -195,11 +304,39 @@ const resetPassword = asyncWrapper(async (req, res, next) => {
   // 3) Update changedPasswordAt property for the user
 
   // 4) Log the user in, send JWT
-  const token = createToken(user._id);
-  res.status(200).json({
-    status: httpStatusText.SUCCESS,
-    token,
-  });
+  createSendToken(user, 200, res);
+});
+
+const updatePassword = asyncWrapper(async (req, res, next) => {
+  // 1) Get user from collection
+  const user = await User.findById(req.user.id).select('+password');
+
+  // 2) Check if POSTed current password is correct
+  const { currentPassword, newPassword, confirmPassword } = req.body;
+  if (!currentPassword) {
+    const error = appError.create(
+      400,
+      httpStatusText.FAIL,
+      'Please provide the current password'
+    );
+    return next(error);
+  }
+  if (!(await user.correctPassword(currentPassword, user.password))) {
+    const error = appError.create(
+      401,
+      httpStatusText.FAIL,
+      'Your current password is wrong 💥'
+    );
+    return next(error);
+  }
+  // 3) If so, update password => after confirming the new password
+  user.password = newPassword;
+  user.confirmPassword = confirmPassword;
+  await user.save();
+  // ! User.findByIdAndUpdate will NOT work, BECAUSE the pre save middleware will not work, and the password not CONFIRMED 🤓
+
+  // 4) Log user in, send JWT
+  createSendToken(user, 200, res);
 });
 
 export default {
@@ -209,4 +346,7 @@ export default {
   restrictTo,
   forgotPassword,
   resetPassword,
+  updatePassword,
+  verifyEmail,
+  regenerateEmailToken,
 };
