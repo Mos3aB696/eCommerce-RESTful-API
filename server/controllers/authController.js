@@ -8,6 +8,13 @@ import sendEmail from '../utils/email.js';
 import crypto from 'crypto';
 import createToken from '../utils/createToken.js';
 
+/**
+ * Generates a JWT for a user, sets it as an HTTP-only cookie, and sends it in the response.
+ * @param {Object} user - The user object for whom the token is generated.
+ * @param {number} statusCode - The HTTP status code for the response.
+ * @param {Object} res - The Express.js response object.
+ * @param {boolean} [signUp=false] - Indicates if the function is being used after a successful signup to include a specific message.
+ */
 const createSendToken = (user, statusCode, res, signUp = null) => {
   const token = createToken(user._id);
   const cookieOptions = {
@@ -41,6 +48,13 @@ const createSendToken = (user, statusCode, res, signUp = null) => {
     });
   }
 };
+
+/**
+ * Registers a new user, generates an email verification token, and sends it to the user's email.
+ * @param {Object} req - The Express.js request object containing user details in the body.
+ * @param {Object} res - The Express.js response object.
+ * @param {Function} next - The Express.js next middleware function for error handling.
+ */
 
 const signUp = asyncWrapper(async (req, res, next) => {
   //? 1) Create a new user and send token to confirm email
@@ -78,6 +92,13 @@ const signUp = asyncWrapper(async (req, res, next) => {
   }
 });
 
+/**
+ * Generates a new email verification token for a user whose email is not yet verified and sends it to the user's email.
+ * @param {Object} req - The Express.js request object containing the user's email in `req.user`.
+ * @param {Object} res - The Express.js response object.
+ * @param {Function} next - The Express.js next middleware function for error handling.
+ */
+
 const regenerateEmailToken = asyncWrapper(async (req, res, next) => {
   const user = await User.findOne({
     email: req.user.email,
@@ -104,6 +125,13 @@ const regenerateEmailToken = asyncWrapper(async (req, res, next) => {
     return next(error);
   }
 });
+
+/**
+ * Verifies a user's email using the token sent to their email address.
+ * @param {Object} req - The Express.js request object containing the token in the URL parameters.
+ * @param {Object} res - The Express.js response object.
+ * @param {Function} next - The Express.js next middleware function for error handling.
+ */
 
 const verifyEmail = asyncWrapper(async (req, res, next) => {
   const hashedToken = crypto
@@ -133,6 +161,13 @@ const verifyEmail = asyncWrapper(async (req, res, next) => {
   createSendToken(user, 200, res);
 });
 
+/**
+ * Logs in a user by validating their email and password, and sends a JWT in the response.
+ * @param {Object} req - The Express.js request object containing email and password in the body.
+ * @param {Object} res - The Express.js response object.
+ * @param {Function} next - The Express.js next middleware function for error handling.
+ */
+
 const login = asyncWrapper(async (req, res, next) => {
   const { email, password } = req.body;
   // 1) Check if email and password exist
@@ -158,9 +193,15 @@ const login = asyncWrapper(async (req, res, next) => {
   createSendToken(user, 200, res);
 });
 
+/**
+ * Middleware to protect routes by verifying the user's JWT and ensuring their account is valid.
+ * @param {Object} req - The Express.js request object containing the token in headers.
+ * @param {Object} res - The Express.js response object.
+ * @param {Function} next - The Express.js next middleware function to grant access to the protected route.
+ */
+
 const protect = asyncWrapper(async (req, res, next) => {
   //? 1) Getting token and check if it's there
-
   let token;
   if (
     req.headers.authorization &&
@@ -176,13 +217,12 @@ const protect = asyncWrapper(async (req, res, next) => {
     );
     return next(error);
   }
-  //? 2) Verification token
 
+  //? 2) Verification token
   // * Use promisify to convert callback function to promise 🤓
   const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
 
   //? 3) Check if user still exists in the database => if the user is deleted after the token was issued 🤓
-
   const currentUser = await User.findById(decoded.id);
   if (!currentUser) {
     const error = appError.create(
@@ -194,7 +234,6 @@ const protect = asyncWrapper(async (req, res, next) => {
   }
 
   //? 4) Check if user changed password after the token was issued
-
   if (currentUser.isChanged(decoded.iat)) {
     const error = appError.create(
       401,
@@ -219,6 +258,12 @@ const protect = asyncWrapper(async (req, res, next) => {
   next();
 });
 
+/**
+ * Middleware to restrict access to specific routes based on the user's role.
+ * @param {...string} roles - The roles that are allowed to access the route.
+ * @returns {Function} - Middleware function that checks the user's role and grants or denies access.
+ */
+
 const restrictTo = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
@@ -232,6 +277,13 @@ const restrictTo = (...roles) => {
     next();
   };
 };
+
+/**
+ * Generates a password reset token for a user and sends it to their email.
+ * @param {Object} req - The Express.js request object containing the user's email in the body.
+ * @param {Object} res - The Express.js response object.
+ * @param {Function} next - The Express.js next middleware function for error handling.
+ */
 
 const forgotPassword = asyncWrapper(async (req, res, next) => {
   // 1) Get user based on POSTed email
@@ -275,6 +327,13 @@ const forgotPassword = asyncWrapper(async (req, res, next) => {
   }
 });
 
+/**
+ * Resets a user's password using the token sent to their email.
+ * @param {Object} req - The Express.js request object containing the token in the URL parameters and the new password in the body.
+ * @param {Object} res - The Express.js response object.
+ * @param {Function} next - The Express.js next middleware function for error handling.
+ */
+
 const resetPassword = asyncWrapper(async (req, res, next) => {
   // 1) Get user based on the token
   //? Hashing the token to compare it with the hashed one on the database
@@ -306,6 +365,13 @@ const resetPassword = asyncWrapper(async (req, res, next) => {
   // 4) Log the user in, send JWT
   createSendToken(user, 200, res);
 });
+
+/**
+ * Allows an authenticated user to update their password after verifying the current password.
+ * @param {Object} req - The Express.js request object containing the current and new passwords in the body.
+ * @param {Object} res - The Express.js response object.
+ * @param {Function} next - The Express.js next middleware function for error handling.
+ */
 
 const updatePassword = asyncWrapper(async (req, res, next) => {
   // 1) Get user from collection

@@ -12,18 +12,14 @@ const categorySchema = new mongoose.Schema({
   },
   products: [
     {
-      type: mongoose.Schema.Types.ObjectId,
+      type: mongoose.Schema.ObjectId,
       ref: 'Product',
     },
   ],
   //? Timestamps
   createdAt: {
     type: Date,
-    default: Date.now(),
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now(),
+    default: new Date(),
   },
 });
 

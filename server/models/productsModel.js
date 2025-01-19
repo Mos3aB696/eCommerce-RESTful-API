@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import validator from 'validator';
 
 const productSchema = new mongoose.Schema({
   //? Required fields
@@ -14,27 +13,24 @@ const productSchema = new mongoose.Schema({
     required: [true, 'Product description is required'],
     trim: true,
   },
-  category: {
-    // type: mongoose.Schema.Types.ObjectId,
-    // ref: 'Category',
-    type: String,
-    required: [true, 'Product category is required'],
-    validate: [
-      validator.isAlpha,
-      'Category must only contain letters (a-z, A-Z)',
-    ],
-  },
+  category: [
+    {
+      type: mongoose.Schema.ObjectId,
+      ref: 'Category',
+      required: [true, 'Product category is required'],
+    },
+  ],
   price: {
     type: Number,
     required: [true, 'Product price is required'],
   },
   imageCover: {
     type: String,
-    required: [true, 'Product imageCover is required'],
+    // required: [true, 'Product imageCover is required'],
   },
   images: {
     type: [String],
-    required: [true, 'Product images are required'],
+    // required: [true, 'Product images are required'],
   },
   countInStock: {
     type: Number,

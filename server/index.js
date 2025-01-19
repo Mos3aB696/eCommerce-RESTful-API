@@ -3,12 +3,12 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import helmet from 'helmet';
 import mongoSanitize from 'express-mongo-sanitize';
-import xss from 'xss';
 import hpp from 'hpp';
 import cors from 'cors';
 import compression from 'compression';
-
+import sanitizeInput from './middlewares/sanitizeInput.js';
 import productRouter from './routers/productRoutes.js';
+import categoryController from './routers/categoryRoutes.js';
 import userRouter from './routers/userRoutes.js';
 import errorController from './controllers/errorController.js';
 
@@ -39,14 +39,7 @@ app.use(express.json({ limit: '10kb' }));
 
 // ! Data sanitization against NoSQL query injection
 app.use(mongoSanitize());
-const sanitizeInput = (req, res, next) => {
-  Object.keys(req.body).forEach((key) => {
-    if (typeof req.body[key] === 'string') {
-      req.body[key] = xss(req.body[key]);
-    }
-  });
-  next();
-};
+
 // ! Data sanitization against XSS
 app.use(sanitizeInput);
 
@@ -62,6 +55,7 @@ app.use(compression());
 //* 2) Routes
 app.use('/api/v1/products', productRouter);
 app.use('/api/v1/users', userRouter);
+app.use('/api/v1/categories', categoryController);
 
 //* 3) Error Handling (Handle all unhandled routes)
 app.all('*', errorController.notFoundPage);
