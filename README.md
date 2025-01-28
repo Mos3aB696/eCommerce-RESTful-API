@@ -2,7 +2,7 @@
 
 ## Overview
 
-**BetaVersion** is a robust and secure RESTful API designed for real-world eCommerce applications. Built using **Node.js**, **Express.js**, **MongoDB**, and **Mongoose**, this API integrates modern security and performance practices to meet the demands of scalable eCommerce platforms.
+**The eCommerce beta version** is a robust and secure RESTful API designed for real-world eCommerce applications. Built using Node.js, Express.js, MongoDB, and Mongoose, it integrates modern security and performance practices to meet the demands of scalable eCommerce platforms.
 
 ## Features
 
